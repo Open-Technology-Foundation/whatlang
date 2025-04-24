@@ -1,16 +1,16 @@
 # Whatlang
 
-A command-line language detection tool for text files and stdin input.
+Language detection tool for text files and stdin.
 
 ## Features
 
-- Identifies natural language of text content
+- Identifies text language with confidence scores
 - Processes files or stdin input
 - Controls sample size for efficient analysis
-- Restricts detection to specific languages
-- Provides multiple output formats (text, JSON, CSV, Bash)
-- Customizes fallback language for detection failures
-- Includes verbose mode for diagnostics
+- Restricts to specific languages
+- Multiple output formats (text, JSON, CSV, Bash)
+- Custom fallback language support
+- Verbose mode for diagnostics
 
 ## Installation
 
@@ -36,18 +36,18 @@ sudo ln -s "$(pwd)"/whatlang /usr/local/bin/whatlang
 ### Basic Usage
 
 ```bash
-# Process a file
+# Process file
 whatlang document.txt
 # Output: document.txt: en  English  0.98
 
 # Process multiple files
 whatlang file1.txt file2.txt
 
-# Process from stdin
+# Process stdin
 echo "Bonjour le monde" | whatlang
 # Output: fr  French  0.99
 
-# Use input redirection
+# Use redirection
 whatlang < document.txt
 ```
 
@@ -58,7 +58,7 @@ Usage: whatlang [OPTIONS] [FILES...]
 
 Options:
   -n, --sample-size INT  Bytes to examine (default: 420)
-  -L, --language-set STR Limit to specific languages (comma-separated)
+  -L, --language-set STR Limit to languages (comma-separated)
   -f, --fallback-langcode STR  Code for failed detection (default: unknown)
   -F, --fallback-langname STR  Name for failed detection (default: Unknown)
   --format FMT          Output format: text, json, csv, bash (default: text)
@@ -88,31 +88,24 @@ whatlang --format bash file.txt
 
 ### Examples
 
-#### Document Sorting
-
 ```bash
-# Sort documents by language
+# Sort by language
 for file in *.txt; do
   lang=$(whatlang "$file" | cut -d':' -f2 | cut -f1)
   mkdir -p "by-lang/$lang"
   cp "$file" "by-lang/$lang/"
 done
-```
 
-#### Script Integration
-
-```bash
-# Use in a script
+# Use in scripts
 eval $(whatlang --format bash document.txt)
 echo "Language: ${LANG_INFO[name]} (${LANG_INFO[code]})"
-echo "Confidence: ${LANG_INFO[confidence]}"
 ```
 
 ## Limitations
 
-- Requires at least 10 characters for reliable detection
+- Requires 10+ characters for reliable detection
 - Limited to languages supported by langdetect
-- Mixed-language content returns only dominant language
+- Mixed-language content returns dominant language
 - Assumes UTF-8 encoding
 
 ## Dependencies

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Whatlang - Language detection tool for text files and stdin input.
+Whatlang - Language detection for text files and stdin.
 
-Identifies the language of text from files or stdin, providing language code,
-name, and confidence score. Supports sample size control, language restriction,
-multiple output formats, and custom fallback languages.
+Identifies text language, providing code, name, and confidence score.
+Supports sample size control, language restriction, multiple output 
+formats, and custom fallback languages.
 
 Usage:
   whatlang [OPTIONS] [FILES...]
@@ -12,7 +12,7 @@ Usage:
 
 Options:
   -n, --sample-size INT  Bytes to examine (default: 420)
-  -L, --language-set STR Limit detection to these languages (comma-separated)
+  -L, --language-set STR Limit to languages (comma-separated)
   -f, --fallback-langcode STR  Code for failed detection (default: unknown)
   -F, --fallback-langname STR  Name for failed detection (default: Unknown)
   --format FMT          Output format: text, json, csv, bash (default: text)
@@ -32,13 +32,13 @@ DetectorFactory.seed = 0
 
 def detect_language(text, lang_set=None, fallback_code="unknown", fallback_name="Unknown"):
   """
-  Detect the language of text with optional language restriction.
+  Detect text language with optional language restriction.
   
   Args:
       text: Text to analyze
-      lang_set: List of language codes to restrict detection to
-      fallback_code: Code returned on detection failure
-      fallback_name: Name returned on detection failure
+      lang_set: Language codes to restrict to
+      fallback_code: Code for detection failure
+      fallback_name: Name for detection failure
       
   Returns:
       (language_code, language_name, confidence_score)
@@ -52,33 +52,28 @@ def detect_language(text, lang_set=None, fallback_code="unknown", fallback_name=
       print("Warning: Text too short for reliable detection", file=sys.stderr)
       return fallback_code, fallback_name, 0.0
     
-    # Run detection with potential language restriction
+    # Handle language set restriction if specified
     if lang_set:
-      # For language set restriction, we use detect_langs and filter the results
       try:
-        # Use standard detection but filter results
         results = detect_langs(text)
-        # Filter to only include languages in our set
         filtered_results = [r for r in results if r.lang in lang_set]
         
         if not filtered_results:
           print(f"Warning: No languages in set {lang_set} detected", file=sys.stderr)
           return fallback_code, fallback_name, 0.0
           
-        # Get the most likely language from our filtered set
         result = filtered_results[0]  
         lang_code = result.lang
         confidence = result.prob
       except Exception as e:
-        print(f"Warning: Failed to detect language within specified set: {e}", file=sys.stderr)
+        print(f"Warning: Language restriction failed: {e}", file=sys.stderr)
         return fallback_code, fallback_name, 0.0
     else:
-      # Standard detection with probabilities
+      # Standard detection without restriction
       results = detect_langs(text)
       if not results:
         return fallback_code, fallback_name, 0.0
         
-      # Get the most likely language
       result = results[0]
       lang_code = result.lang
       confidence = result.prob
@@ -99,17 +94,17 @@ def detect_language(text, lang_set=None, fallback_code="unknown", fallback_name=
 
 def format_output(filepath, code, name, confidence, output_format):
   """
-  Format detection results in the specified output format.
+  Format results in the specified output format.
   
   Args:
-      filepath: Path to file (None for stdin)
+      filepath: File path or None for stdin
       code: Language code
       name: Language name
-      confidence: Detection confidence (0.0-1.0)
-      output_format: 'text', 'json', 'csv', or 'bash'
+      confidence: Confidence score (0.0-1.0)
+      output_format: 'text', 'json', 'csv', 'bash'
       
   Returns:
-      Formatted output string
+      Formatted string
   """
   if filepath:
     base_name = os.path.basename(filepath)
@@ -146,16 +141,16 @@ def process_file(filepath, sample_size=420, lang_set=None,
                 fallback_code="unknown", fallback_name="Unknown", 
                 output_format='text', verbose=False):
   """
-  Read a file, detect its language, and output the results.
+  Process a file and output language detection results.
   
   Args:
-      filepath: File to analyze
-      sample_size: Maximum bytes to read
-      lang_set: Language codes to restrict detection to
-      fallback_code: Code for detection failures
-      fallback_name: Name for detection failures
+      filepath: Target file path
+      sample_size: Max bytes to analyze
+      lang_set: Allowed language codes
+      fallback_code: Fallback code
+      fallback_name: Fallback name
       output_format: Output format
-      verbose: Enable verbose logging
+      verbose: Enable verbose output
   """
   try:
     if verbose:
@@ -180,10 +175,9 @@ def process_file(filepath, sample_size=420, lang_set=None,
 
 def main():
   """
-  Command-line entry point for whatlang.
+  Command-line entry point.
   
-  Parses arguments, processes input from files or stdin, and outputs
-  language detection results in the specified format.
+  Parses arguments and processes input from files or stdin.
   """
   parser = argparse.ArgumentParser(
     prog='whatlang',
@@ -215,12 +209,12 @@ def main():
   
   args = parser.parse_args()
   
-  # Process language restriction parameter
+  # Handle language restriction if specified
   lang_set = args.language_set.split(',') if args.language_set else None
   if lang_set and args.verbose:
-    print(f"Restricting detection to languages: {', '.join(lang_set)}", file=sys.stderr)
+    print(f"Restricting to languages: {', '.join(lang_set)}", file=sys.stderr)
   
-  # Dynamic import of json when needed
+  # Import json only when needed
   if args.format == 'json':
     global json
     import json

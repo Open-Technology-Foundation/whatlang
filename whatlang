@@ -1,13 +1,13 @@
 #!/bin/bash
 #shellcheck disable=SC2155,SC1091
-# Whatlang - CLI wrapper for language detection
+# Whatlang wrapper script
 set -euo pipefail
 
-# Resolve script location
+# Get script path
 declare -- PRG0=$(readlink -en -- "$0")
 declare -- PRGDIR=$(dirname -- "$PRG0") PRG=$(basename -- "$PRG0")
 
-# Run implementation in virtualenv
+# Activate virtualenv and run
 source "$PRGDIR"/.venv/bin/activate
 "$PRGDIR"/.venv/bin/python "$PRGDIR"/whatlang.py "$@"
 #fin
