@@ -57,7 +57,7 @@ whatlang < document.txt
 Usage: whatlang [OPTIONS] [FILES...]
 
 Options:
-  -n, --sample-size INT  Bytes to examine (default: 420)
+  -n, --sample-size INT  Bytes to examine (default: 420, max: 4096)
   -L, --language-set STR Limit to languages (comma-separated)
   -f, --fallback-langcode STR  Code for failed detection (default: unknown)
   -F, --fallback-langname STR  Name for failed detection (default: Unknown)

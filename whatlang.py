@@ -187,7 +187,7 @@ def main():
   
   # Performance options
   parser.add_argument('-n', '--sample-size', type=int, default=420,
-                    help='Number of bytes to examine (default: 420)')
+                    help='Number of bytes to examine (default: 420, max: 4096)')
   
   # Output format options
   parser.add_argument('--format', choices=['text', 'json', 'csv', 'bash'], 
@@ -208,6 +208,9 @@ def main():
                     help='Display verbose information including detection details')
   
   args = parser.parse_args()
+  
+  # Enforce sample size limit
+  args.sample_size = min(args.sample_size, 4096)
   
   # Handle language restriction if specified
   lang_set = args.language_set.split(',') if args.language_set else None
