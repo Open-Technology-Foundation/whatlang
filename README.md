@@ -21,34 +21,47 @@ Whatlang identifies the language of text content, providing ISO language codes, 
 
 ## Installation
 
-### Option 1: From Source Repository
+### Quick Install (One-liner)
+
+```bash
+git clone https://github.com/Open-Technology-Foundation/whatlang && cd whatlang && sudo ./install.sh
+```
+
+### Option 1: Using the Installation Script (Recommended)
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/Open-Technology-Foundation/whatlang
+cd whatlang
+
+# Run the installation script (requires sudo)
+sudo ./install.sh
+```
+
+This will:
+- Install whatlang to `/usr/local/share/whatlang`
+- Set up the Python virtual environment and install dependencies
+- Create a symlink to `/usr/local/bin/whatlang`
+
+### Option 2: Manual Installation
+
+```bash
+# Clone repository
+git clone https://github.com/Open-Technology-Foundation/whatlang
 cd whatlang
 
 # Setup Python environment
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+
+# Install dependencies directly
+pip install langdetect pycountry chardet
 
 # Make the wrapper script executable
 chmod +x whatlang
 
 # Optional: add to system path for global access
 sudo ln -s "$(pwd)/whatlang" /usr/local/bin/whatlang
-```
-
-### Option 2: Using pip (recommended for general use)
-
-```bash
-# Install from PyPI
-pip install whatlang
-
-# This installs the Python module and command-line tool
-# You can now use the command 'whatlang-py' directly
-whatlang-py -h
 ```
 
 ### Dependencies

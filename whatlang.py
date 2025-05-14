@@ -40,12 +40,14 @@ import sys
 import os
 import argparse
 from langdetect import DetectorFactory, detect_langs
-import pycountry
+
+# Move pycountry import to function level since it's only used in detect_language
+# This helps when the module is imported for stdin-only processing
 
 # Conditionally import json
+JSON_AVAILABLE = True
 try:
   import json
-  JSON_AVAILABLE = True
 except ImportError:
   JSON_AVAILABLE = False
 
@@ -60,6 +62,11 @@ PRINT_WARNINGS = __name__ == "__main__"
 
 # Set seed for reproducible results
 DetectorFactory.seed = 0
+
+# Preload language profiles on import to improve performance in tight loops
+# This triggers the loading of profiles without explicit call to load_profile
+from langdetect.detector_factory import init_factory
+init_factory()
 
 def detect_language(text, lang_set=None, fallback_code="unknown", fallback_name="Unknown"):
   """
@@ -97,14 +104,21 @@ def detect_language(text, lang_set=None, fallback_code="unknown", fallback_name=
         specified set are detected
   """
   try:
-    # Check for empty or minimal text
-    if not text or text.strip() == "":
+    # Avoid multiple strip() operations by doing it once
+    if not text:  # Fast initial check before more expensive operations
+      if PRINT_WARNINGS:
+        print("Warning: Empty text provided", file=sys.stderr)
+      return fallback_code, fallback_name, 0.0
+      
+    # Only strip once and reuse the result
+    text_stripped = text.strip()
+    if not text_stripped:
       if PRINT_WARNINGS:
         print("Warning: Empty text provided", file=sys.stderr)
       return fallback_code, fallback_name, 0.0
     
     # Check minimum text length for reliable detection
-    if len(text.strip()) < MIN_SAMPLE_SIZE / 10:  # More permissive for in-memory text
+    if len(text_stripped) < MIN_SAMPLE_SIZE / 10:  # More permissive for in-memory text
       if PRINT_WARNINGS:
         print(f"Warning: Text too short for reliable detection (minimum {MIN_SAMPLE_SIZE / 10} chars recommended)", file=sys.stderr)
       return fallback_code, fallback_name, 0.0
@@ -137,13 +151,14 @@ def detect_language(text, lang_set=None, fallback_code="unknown", fallback_name=
       lang_code = result.lang
       confidence = result.prob
       
-    # Map language code to full name using pycountry
+    # Map language code to full name using pycountry (import here to optimize startup)
     try:
+      import pycountry
       lang = pycountry.languages.get(alpha_2=lang_code)
       lang_name = lang.name if lang else lang_code
       return lang_code, lang_name, confidence
-    except AttributeError:
-      # If language name lookup fails, use the code as the name
+    except (AttributeError, ImportError):
+      # If language name lookup fails or pycountry import fails, use the code as the name
       return lang_code, lang_code, confidence
         
   except Exception as e:
@@ -217,7 +232,7 @@ def format_output(filepath, code, name, confidence, output_format):
 
 def process_file(filepath, sample_size=DEFAULT_SAMPLE_SIZE, lang_set=None, 
                fallback_code="unknown", fallback_name="Unknown", 
-               output_format='text', verbose=False):
+               output_format='text', verbose=False, encoding=None):
   """
   Process a file and output its language detection results.
   
@@ -261,33 +276,40 @@ def process_file(filepath, sample_size=DEFAULT_SAMPLE_SIZE, lang_set=None,
     if verbose and PRINT_WARNINGS:
       print(f"Processing {filepath} (min {MIN_SAMPLE_SIZE}, max {sample_size} bytes)...", file=sys.stderr)
       
-    # Detect encoding first
-    encoding = 'utf-8'  # Default
-    try:
-      import chardet
-      # Read a small sample to detect encoding
-      with open(filepath, 'rb') as rawf:
-        raw_bytes = rawf.read(min(1024, sample_size))
-      detect_result = chardet.detect(raw_bytes)
-      if detect_result['confidence'] > 0.7:
-        encoding = detect_result['encoding']
+    # Use specified encoding or auto-detect
+    file_encoding = encoding or 'utf-8'  # Use provided encoding or default to utf-8
+    
+    # Skip encoding detection if encoding is explicitly provided
+    if not encoding:
+      try:
+        import chardet
+        # Read only first few bytes to detect encoding - more efficient
+        with open(filepath, 'rb') as rawf:
+          # For most encodings, the first 256 bytes are sufficient
+          raw_bytes = rawf.read(min(256, sample_size))
+        # Use chardet's fast version for better performance
+        detect_result = chardet.detect(raw_bytes, should_get_encoding=True, should_get_confidence=True)
+        if detect_result['confidence'] > 0.7:
+          file_encoding = detect_result['encoding']
+          if verbose and PRINT_WARNINGS:
+            print(f"Detected encoding: {file_encoding} (confidence: {detect_result['confidence']:.2f})", file=sys.stderr)
+      except ImportError:
         if verbose and PRINT_WARNINGS:
-          print(f"Detected encoding: {encoding} (confidence: {detect_result['confidence']:.2f})", file=sys.stderr)
-    except ImportError:
-      if verbose and PRINT_WARNINGS:
-        print("Warning: chardet not installed; using UTF-8 encoding", file=sys.stderr)
-    except Exception as e:
-      if verbose and PRINT_WARNINGS:
-        print(f"Warning: encoding detection failed: {e}; using UTF-8", file=sys.stderr)
+          print("Warning: chardet not installed; using UTF-8 encoding", file=sys.stderr)
+      except Exception as e:
+        if verbose and PRINT_WARNINGS:
+          print(f"Warning: encoding detection failed: {e}; using UTF-8", file=sys.stderr)
+    elif verbose and PRINT_WARNINGS:
+      print(f"Using specified encoding: {file_encoding}", file=sys.stderr)
         
-    # Now try to open with detected encoding
+    # Now try to open with detected/specified encoding
     try:
-      with open(filepath, 'r', encoding=encoding) as f:
+      with open(filepath, 'r', encoding=file_encoding) as f:
         text = f.read(sample_size)
     except UnicodeDecodeError:
       # Fallback to utf-8 if detected encoding fails
-      if encoding != 'utf-8' and verbose and PRINT_WARNINGS:
-        print(f"Warning: Failed with {encoding}, falling back to UTF-8", file=sys.stderr)
+      if file_encoding != 'utf-8' and verbose and PRINT_WARNINGS:
+        print(f"Warning: Failed with {file_encoding}, falling back to UTF-8", file=sys.stderr)
       try:
         with open(filepath, 'r', encoding='utf-8') as f:
           text = f.read(sample_size)
@@ -414,6 +436,8 @@ def main():
   # Verbose mode
   parser.add_argument('--verbose', '-v', action='store_true',
                     help='Display verbose information including detection details')
+  parser.add_argument('--encoding', '-e', type=str,
+                    help='Specify file encoding (e.g., "utf-8", "latin-1") to skip detection')
   
   args = parser.parse_args()
   
@@ -448,7 +472,8 @@ def main():
         fallback_code=args.fallback_langcode,
         fallback_name=args.fallback_langname,
         output_format=args.format,
-        verbose=args.verbose
+        verbose=args.verbose,
+        encoding=args.encoding
       )
   elif not sys.stdin.isatty():
     # Process text from stdin, respecting sample_size
