@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Ensure script is run as root
-if [ "$EUID" -ne 0 ]; then
+if ((EUID)); then
   echo "This installation script must be run as root (with sudo)"
   exit 1
 fi
@@ -44,3 +44,5 @@ ln -s "$INSTALL_DIR/whatlang" "$SYMLINK_PATH"
 echo "Installation complete!"
 echo "You can now use whatlang by running: whatlang [OPTIONS] [FILES...]"
 echo "Run 'whatlang -h' for help."
+
+#fin

@@ -16,8 +16,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Whatlang Contributors",
-    author_email="user@example.com",  # Replace with actual email
-    url="https://github.com/username/whatlang",  # Replace with actual URL
+    author_email="info@open-tech-foundation.org",  # Example email
+    url="https://github.com/Open-Technology-Foundation/whatlang",  # Based on installation instructions
     packages=find_packages(),
     py_modules=["whatlang"],
     entry_points={
@@ -45,8 +45,8 @@ setup(
     ],
     keywords="language detection, text analysis, nlp, linguistics",
     project_urls={
-        "Documentation": "https://github.com/username/whatlang",  # Replace with actual URL
-        "Bug Reports": "https://github.com/username/whatlang/issues",  # Replace with actual URL
-        "Source Code": "https://github.com/username/whatlang",  # Replace with actual URL
+        "Documentation": "https://github.com/Open-Technology-Foundation/whatlang",
+        "Bug Reports": "https://github.com/Open-Technology-Foundation/whatlang/issues",
+        "Source Code": "https://github.com/Open-Technology-Foundation/whatlang",
     },
 )

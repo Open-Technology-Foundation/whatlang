@@ -85,7 +85,7 @@ whatlang document.txt
 # Output: document.txt: en  English  0.98
 
 # Process multiple files at once
-whatlang file1.txt file2.txt file3.txt
+whatlang --format json *.txt
 
 # Process text from stdin via pipe
 echo "Bonjour le monde" | whatlang
@@ -106,6 +106,7 @@ Options:
   -f, --fallback-langcode STR  Code for failed detection (default: unknown)
   -F, --fallback-langname STR  Name for failed detection (default: Unknown)
   --format FMT          Output format: text, json, csv, bash (default: text)
+  -e, --encoding STR    Specify file encoding (e.g., "utf-8", "latin-1")
   -v, --verbose         Show processing details
   -h, --help            Show help message
 ```
@@ -166,6 +167,18 @@ Set custom language code and name for failed detections:
 ```bash
 # Set fallback to English
 whatlang -f en -F English document.txt
+```
+
+### Manual Encoding Selection
+
+Override automatic encoding detection:
+
+```bash
+# Specify UTF-8 encoding
+whatlang -e utf-8 document.txt
+
+# Specify Latin-1 encoding
+whatlang -e latin-1 legacy-document.txt
 ```
 
 ## Practical Examples
@@ -249,36 +262,6 @@ whatlang --format csv *.txt | cut -d',' -f2 | sort | uniq -c | sort -nr
 - **Constructed Languages**: May not reliably detect constructed languages (e.g., Elvish, Klingon)
 - **Confidence Scores**: Confidence values are relative and may vary between language detection runs
 
-## System Requirements
-
-- Python 3.12+
-
-## Building and Distribution
-
-If you want to build the package for distribution:
-
-```bash
-# Install build tools
-pip install build twine
-
-# Build the package
-python -m build
-
-# This creates both source distribution and wheel files in the dist/ directory
-# - dist/whatlang-1.0.0.tar.gz
-# - dist/whatlang-1.0.0-py3-none-any.whl
-
-# Test the package on TestPyPI (optional)
-twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-
-# Upload to PyPI (requires PyPI account)
-twine upload dist/*
-```
-
-## License
-
-This project is licensed under the GNU General Public License v3.0 (GPL-3.0) - see the [LICENSE](LICENSE) file for details.
-
 ## Testing
 
 Whatlang includes a comprehensive test suite using pytest. The tests cover core functionality, edge cases, and CLI integration.
@@ -311,6 +294,10 @@ The test suite includes:
 - Edge case handling
 - Input/output format testing
 
+## License
+
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0) - see the [LICENSE](LICENSE) file for details.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -322,3 +309,4 @@ When contributing code, please:
 4. Follow the existing coding style
 
 For development guidelines and more detailed information, see the [DEVELOPMENT.md](DEVELOPMENT.md) file.
+

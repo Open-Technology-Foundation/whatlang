@@ -26,6 +26,7 @@ Options:
   -f, --fallback-langcode STR  Code for failed detection (default: unknown)
   -F, --fallback-langname STR  Name for failed detection (default: Unknown)
   --format FMT          Output format: text, json, csv, bash (default: text)
+  -e, --encoding STR    Specify file encoding (e.g., "utf-8", "latin-1")
   -v, --verbose         Show processing details
   -h, --help            Show help message
 
@@ -33,6 +34,16 @@ Dependencies:
   - langdetect: Core language detection functionality
   - pycountry: ISO language code to full name mapping
   - chardet: Automatic file encoding detection
+
+Example:
+  # Detect language of a file
+  whatlang document.txt
+  
+  # Process text from stdin
+  echo "Bonjour le monde" | whatlang
+  
+  # With options
+  whatlang -n 1000 -L en,fr,es --format json file.txt
 """
 
 __version__ = "1.0.0"
@@ -97,7 +108,16 @@ def detect_language(text, lang_set=None, fallback_code="unknown", fallback_name=
       Warnings are printed to stderr for detection issues when PRINT_WARNINGS is True.
       
   Note:
-      - Sets fallback values when text is empty, too short, or detection fails
+      - Sets fallback values (with confidence=0.0) in the following cases:
+        * When text is None, empty, or contains only whitespace
+        * When text is too short for reliable detection (less than ~5 characters)
+        * When using language restriction and no matches are found in the specified set
+        * When detection fails for any other reason
+      - If PRINT_WARNINGS is True, warning messages are printed to stderr when:
+        * Empty text is provided
+        * Text is too short for reliable detection
+        * No languages in the specified set are detected
+        * Any other detection errors occur
       - Uses langdetect library for core detection functionality
       - Uses pycountry to map language codes to full language names
       - For language-restricted detection, returns fallback if no languages in the
@@ -186,6 +206,11 @@ def format_output(filepath, code, name, confidence, output_format):
   Returns:
       str: Formatted output string ready for printing
       
+  Raises:
+      NameError: If 'json' output format is selected but the json module is not available.
+        This should only occur when JSON_AVAILABLE is False and this issue should be
+        detected earlier in the program flow.
+      
   Note:
       For file input, the output includes the basename of the file.
       For stdin input, only the language information is included.
@@ -253,9 +278,13 @@ def process_file(filepath, sample_size=DEFAULT_SAMPLE_SIZE, lang_set=None,
           Default is 'text'.
       verbose (bool, optional): Enable verbose output with processing details.
           Default is False.
+      encoding (str, optional): Explicitly specify the file encoding instead of
+          using automatic detection. For example, "utf-8", "latin-1", etc.
+          Default is None (auto-detect).
           
   Returns:
-      None: Results are printed directly to stdout; errors to stderr
+      None: The function does not return a value. Results are printed directly 
+      to stdout; errors and verbose information are printed to stderr.
       
   Raises:
       No exceptions are raised; errors are handled internally and printed to stderr.
@@ -263,11 +292,14 @@ def process_file(filepath, sample_size=DEFAULT_SAMPLE_SIZE, lang_set=None,
   Note:
       - The actual sample size is constrained between MIN_SAMPLE_SIZE (50) and
         MAX_SAMPLE_SIZE (4096) bytes
-      - Verbose mode outputs additional information to stderr during processing
+      - Verbose mode outputs additional information to stderr during processing,
+        including encoding detection results and language detection confidence
       - Files smaller than MIN_SAMPLE_SIZE will still be processed, but with a
         warning about potential reduced accuracy
       - The function automatically detects file encoding and falls back to UTF-8
-        or latin-1 if detection fails
+        or latin-1 if detection fails, unless an explicit encoding is provided
+      - When verbose=True, detailed processing information is sent to stderr, 
+        including sample size, detected encoding, and detection results
   """
   try:
     # Enforce minimum and maximum sample size
@@ -366,6 +398,10 @@ def set_warning_output(enabled=True):
       When whatlang is run directly as a script, warnings are enabled by default.
       When imported as a module, warnings are disabled by default unless 
       explicitly enabled with this function.
+      
+      This function is not thread-safe. If you're using whatlang in a multi-threaded
+      environment, be aware that changing the warning output setting will affect
+      all threads using the module.
   """
   global PRINT_WARNINGS
   PRINT_WARNINGS = enabled
@@ -394,6 +430,7 @@ def main():
   Exit codes:
       0: Successful execution
       1: No input provided (no files and no stdin)
+      1: JSON format selected but json module is not available
       
   Flow:
       1. Parse command line arguments using argparse
@@ -404,10 +441,21 @@ def main():
       6. Display help and exit with code 1 if no input is provided
       
   Note:
+      - Available command-line arguments:
+        * files: Files to process (positional arguments)
+        * -n, --sample-size: Number of bytes to examine (default: 512)
+        * --format: Output format ('text', 'json', 'csv', 'bash')
+        * -L, --language-set: Comma-separated list of language codes
+        * -f, --fallback-langcode: Code to use when detection fails
+        * -F, --fallback-langname: Name to use when detection fails
+        * -v, --verbose: Display verbose information
+        * -e, --encoding: Specify file encoding to skip detection
+        * -h, --help: Show help message
       - JSON availability is checked if JSON output format is selected
-      - Sample size is enforced within the MIN_SAMPLE_SIZE to MAX_SAMPLE_SIZE range
+      - Sample size is enforced within the MIN_SAMPLE_SIZE (50) to MAX_SAMPLE_SIZE (4096) range
       - Language set is parsed from comma-separated string to a list
-      - When verbose mode is enabled, processing details are output to stderr
+      - When verbose mode is enabled, processing details are output to stderr,
+        including sample size adjustments and language restrictions
   """
   parser = argparse.ArgumentParser(
     prog='whatlang',

@@ -1,6 +1,6 @@
-# CLAUDE.md
+# DEVELOPMENT GUIDELINES
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to when working with code in this repository.
 
 # Whatlang
 
@@ -161,3 +161,4 @@ print(f"Fallback: {name} ({code}) with {confidence:.2f} confidence")
 # Enable warning messages (for debugging)
 whatlang.set_warning_output(True)
 ```
+
