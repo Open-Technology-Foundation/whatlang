@@ -1,13 +1,51 @@
 #!/bin/bash
 #shellcheck disable=SC2155,SC1091
 # Whatlang wrapper script
+# 
+# This is a wrapper script that:
+#   1. Resolves the path to the whatlang installation directory
+#   2. Activates the Python virtual environment (.venv)
+#   3. Runs the main Python script with all provided arguments
+#
+# Usage: ./whatlang [OPTIONS] [FILES...]
+#        (See whatlang.py for full command-line options)
+#
 set -euo pipefail
 
-# Get script path
+# Get absolute path to script location regardless of how it's called
 declare -- PRG0=$(readlink -en -- "$0")
 declare -- PRGDIR=$(dirname -- "$PRG0") PRG=$(basename -- "$PRG0")
 
-# Activate virtualenv and run
-source "$PRGDIR"/.venv/bin/activate
-"$PRGDIR"/.venv/bin/python "$PRGDIR"/whatlang.py "$@"
+# Check if virtual environment exists
+if [[ ! -d "$PRGDIR/.venv" ]]; then
+  echo "Error: Python virtual environment not found in $PRGDIR/.venv" >&2
+  echo "Please run the following to set up the environment:" >&2
+  echo "  cd $PRGDIR" >&2
+  echo "  python -m venv .venv" >&2
+  echo "  source .venv/bin/activate" >&2
+  echo "  pip install -r requirements.txt" >&2
+  exit 1
+fi
+
+# Check if the Python script exists
+if [[ ! -f "$PRGDIR/whatlang.py" ]]; then
+  echo "Error: Could not find whatlang.py script in $PRGDIR" >&2
+  exit 1
+fi
+
+# Try to activate the virtualenv
+if ! source "$PRGDIR/.venv/bin/activate" 2>/dev/null; then
+  echo "Error: Failed to activate Python virtual environment" >&2
+  exit 1
+fi
+
+# Check Python version
+if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" &>/dev/null; then
+  echo "Error: Python 3.12 or higher is required" >&2
+  echo "Current Python version: $(python --version)" >&2
+  exit 1
+fi
+
+# Run the Python implementation
+"$PRGDIR/.venv/bin/python" "$PRGDIR/whatlang.py" "$@"
 #fin
