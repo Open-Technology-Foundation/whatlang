@@ -1,0 +1,68 @@
+#!/bin/bash
+# Bash completion for whatlang command
+# 
+# To use this completion file:
+#   source /ai/scripts/whatlang/.bash_completion
+# Or add to your .bashrc:
+#   source /ai/scripts/whatlang/.bash_completion
+
+_whatlang() {
+  local cur prev opts long_opts
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+  # Short and long options
+  opts="-n -L -f -F -v -e -h"
+  long_opts="--sample-size --language-set --fallback-langcode --fallback-langname --format --verbose --encoding --help"
+
+  # Handle option completion
+  case "${prev}" in
+    -n|--sample-size)
+      # Suggest common sample sizes
+      COMPREPLY=( $(compgen -W "50 128 256 512 1024 2048 4096" -- ${cur}) )
+      return 0
+      ;;
+    -L|--language-set)
+      # Suggest common language combinations
+      COMPREPLY=( $(compgen -W "en en,fr en,es en,fr,es en,de en,it fr,es de,it" -- ${cur}) )
+      return 0
+      ;;
+    -f|--fallback-langcode)
+      # Suggest common fallback codes
+      COMPREPLY=( $(compgen -W "unknown xx und" -- ${cur}) )
+      return 0
+      ;;
+    -F|--fallback-langname)
+      # Suggest fallback names
+      COMPREPLY=( $(compgen -W "Unknown Undetermined" -- ${cur}) )
+      return 0
+      ;;
+    --format)
+      # Output format options
+      COMPREPLY=( $(compgen -W "text json csv bash" -- ${cur}) )
+      return 0
+      ;;
+    -e|--encoding)
+      # Common encodings
+      COMPREPLY=( $(compgen -W "utf-8 latin-1 ascii cp1252 iso-8859-1" -- ${cur}) )
+      return 0
+      ;;
+  esac
+
+  # Handle option values that start with dashes
+  if [[ ${cur} == -* ]]; then
+    # Complete both short and long options
+    COMPREPLY=( $(compgen -W "${opts} ${long_opts}" -- ${cur}) )
+    return 0
+  fi
+
+  # Complete filenames for non-option arguments
+  COMPREPLY=( $(compgen -f -- ${cur}) )
+  return 0
+}
+
+# Register the completion function
+complete -F _whatlang whatlang
+
+#fin
