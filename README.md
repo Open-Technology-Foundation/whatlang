@@ -1,312 +1,139 @@
-# Whatlang
+# whatlang
 
-A lightweight command-line tool for detecting the language of text content from files or standard input.
+Detect the language of a piece of text and print its ISO 639 code. One
+static binary, no runtime dependencies, about 1 ms per call.
+
+```bash
+$ echo 'apa kabar' | whatlang
+id
+$ whatlang -c report.txt
+en	0.98
+```
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-## Overview
+## Install
 
-Whatlang identifies the language of text content, providing ISO language codes, full language names, and confidence scores. It's designed for efficiency and integration into automated workflows with multiple output formats.
-
-## Key Features
-
-- **Language Detection** - Identifies text language with confidence scores
-- **Multiple Input Sources** - Processes files or stdin input through pipes/redirection
-- **Performance Optimization** - Controls sample size for efficient analysis (default: 512 bytes)
-- **Language Filtering** - Optional restriction to specific languages
-- **Flexible Output** - Multiple formats (text, JSON, CSV, Bash variables)
-- **Custom Fallbacks** - Configurable handling for failed detection
-- **Automatic Encoding Detection** - Handles files with various character encodings
-- **Diagnostic Mode** - Verbose output for troubleshooting
-
-## Installation
-
-### Quick Install (One-liner)
+Needs gcc, GNU make, xz and a static libc (`libc6-dev` on Ubuntu).
 
 ```bash
-git clone https://github.com/Open-Technology-Foundation/whatlang && cd whatlang && sudo ./install.sh
-```
-
-### Option 1: Using the Installation Script (Recommended)
-
-```bash
-# Clone repository
 git clone https://github.com/Open-Technology-Foundation/whatlang
 cd whatlang
-
-# Run the installation script (requires sudo)
-sudo ./install.sh
+make build
+make test
+sudo make install        # /usr/local/bin/whatlang + bash completion
 ```
 
-This will:
-- Install whatlang to `/usr/local/share/whatlang`
-- Set up the Python virtual environment and install dependencies
-- Create a symlink to `/usr/local/bin/whatlang`
-
-### Option 2: Manual Installation
-
-```bash
-# Clone repository
-git clone https://github.com/Open-Technology-Foundation/whatlang
-cd whatlang
-
-# Setup Python environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies directly
-pip install langdetect pycountry chardet
-
-# Make the wrapper script executable
-chmod +x whatlang
-
-# Optional: add to system path for global access
-sudo ln -s "$(pwd)/whatlang" /usr/local/bin/whatlang
-```
-
-### Dependencies
-
-Whatlang relies on the following Python packages (automatically installed with pip):
-- **langdetect** (≥1.0.9) - Core language detection functionality
-- **pycountry** (≥24.6.1) - For mapping language codes to names
-- **chardet** (≥5.0.0) - For automatic file encoding detection
-
-### System Requirements
-
-- Python 3.12 or higher
+The result is a single self-contained file, so deploying to another
+x86-64 Linux host is just copying `whatlang`.
 
 ## Usage
 
-### Basic Usage
+```
+whatlang [OPTIONS] [FILE...]
+
+  -c, --confidence   append TAB and a confidence from 0.00 to 1.00
+  -L, --langs LIST   only consider these comma-separated codes, e.g. id,en
+                     (default: $WHATLANG_LANGS, else all languages)
+  -l, --list         list supported language codes
+  -V, --version      print version
+  -h, --help         show this help
+```
+
+- Reads stdin when no FILE is given, or for `-`.
+- Only the first 64 KiB of each input is examined.
+- Prints `und` when the text has no detectable features (empty, or words the
+  model has no n-grams for) and `zxx` for text with no linguistic content.
+- With several files each line is `FILE<TAB>CODE`.
+
+### Restricting the language set
+
+Short text is where language detectors fail, and most of the failures are
+between closely related languages. If you know the candidates, say so: the
+restriction is applied while scoring, so the best of the allowed languages
+wins.
 
 ```bash
-# Process a single file
-whatlang document.txt
-# Output: document.txt: en  English  0.98
-
-# Process multiple files at once
-whatlang --format json *.txt
-
-# Process text from stdin via pipe
-echo "Bonjour le monde" | whatlang
-# Output: fr  French  0.99
-
-# Process text from stdin via redirection
-whatlang < document.txt
+$ echo 'selamat pagi pak' | whatlang
+ms
+$ echo 'selamat pagi pak' | whatlang -L id,en
+id
+$ export WHATLANG_LANGS=id,en      # default for every call in this shell
 ```
 
-### Command-line Options
+`-L ''` clears a `WHATLANG_LANGS` default for one call.
 
-```
-Usage: whatlang [OPTIONS] [FILES...]
-
-Options:
-  -n, --sample-size INT  Bytes to examine (default: 512, min: 50, max: 4096)
-  -L, --language-set STR Limit to languages (comma-separated, e.g., "en,fr,es")
-  -f, --fallback-langcode STR  Code for failed detection (default: unknown)
-  -F, --fallback-langname STR  Name for failed detection (default: Unknown)
-  --format FMT          Output format: text, json, csv, bash (default: text)
-  -e, --encoding STR    Specify file encoding (e.g., "utf-8", "latin-1")
-  -v, --verbose         Show processing details
-  -h, --help            Show help message
-```
-
-### Output Formats
-
-Whatlang supports multiple output formats to integrate with various workflows:
-
-#### Text Format (default)
-```bash
-whatlang file.txt
-# Output: file.txt: en  English  0.99
-```
-
-#### JSON Format
-```bash
-whatlang --format json file.txt
-# Output: {"file":"file.txt","language_code":"en","language_name":"English","confidence":0.99}
-```
-
-#### CSV Format
-```bash
-whatlang --format csv file.txt
-# Output: file.txt,en,English,0.99
-```
-
-#### Bash Format
-```bash
-whatlang --format bash file.txt
-# Output: declare -A LANG_INFO=([file]="file.txt" [code]="en" [name]="English" [confidence]="0.99")
-```
-
-### Performance Tuning
-
-You can adjust the sample size to balance speed and accuracy:
+### In scripts
 
 ```bash
-# Use a smaller sample for faster processing (less accurate)
-whatlang -n 100 large-document.txt
+lang=$(whatlang -- "$file")
+if [[ $lang == id ]]; then ...; fi
 
-# Use a larger sample for higher accuracy (slower)
-whatlang -n 2000 ambiguous-document.txt
+# with a confidence threshold
+read -r lang conf < <(whatlang -c -- "$file")
+if [[ $conf < 0.70 ]]; then lang=und; fi
 ```
 
-### Language Restriction
+### Exit status
 
-Restrict language detection to a specific set of languages:
+| Code | Meaning |
+|------|---------|
+| 0 | success (including `und`) |
+| 2 | usage error |
+| 3 | file not found |
+| 5 | I/O error |
+| 13 | permission denied |
+| 22 | unknown language code in `-L` / `WHATLANG_LANGS` |
+
+With several files, one failing file does not stop the others; the exit
+status is that of the first failure.
+
+## Accuracy and speed
+
+Measured on 6,000 Tatoeba sentences in 10 languages:
+
+| | ≤20 chars | all | per call |
+|---|---|---|---|
+| whatlang 2 | 89% | 93% | ~0.8 ms (whole process) |
+| whatlang 2, `-L` to the 10 test languages | 97% | 96% | |
+| whatlang 2, `-L id,en` on id/en text | 100% | 99.9% | |
+| whatlang 1 (Python, langdetect) | 75% | 80% | ~200 ms |
+
+Confidence is calibrated enough to act on: without `-L`, a threshold of
+0.70 flags about 93% of wrong answers along with about 20% of right ones.
+
+## How it works
+
+The model is [py3langid](https://github.com/adbar/py3langid) 0.4.0, a naive
+Bayes classifier over byte n-grams covering 140 languages. A byte-level
+Aho-Corasick automaton picks out the n-gram features; each language's score
+is its prior plus the sum of `log1p(count) × weight` over the features found;
+a softmax at temperature `sqrt(bytes)` turns scores into a confidence.
+
+`tools/export_model.py` converts py3langid's model into a compact binary:
+the dense 39 MB automaton becomes trie edges plus failure links (1.8 MB,
+verified to reproduce the original exactly), and weights are quantised to one
+byte. The result is stored xz-compressed in `model/model.bin.xz` and embedded
+in the binary at build time. Labels agree with py3langid on 99.8% of the test
+sentences, and the differences are near-ties.
+
+To regenerate the model after a py3langid update:
 
 ```bash
-# Only detect English, Spanish, or French
-whatlang -L en,es,fr document.txt
-```
-
-### Custom Fallback Values
-
-Set custom language code and name for failed detections:
-
-```bash
-# Set fallback to English
-whatlang -f en -F English document.txt
-```
-
-### Manual Encoding Selection
-
-Override automatic encoding detection:
-
-```bash
-# Specify UTF-8 encoding
-whatlang -e utf-8 document.txt
-
-# Specify Latin-1 encoding
-whatlang -e latin-1 legacy-document.txt
-```
-
-## Practical Examples
-
-### Programmatic Usage in Python
-
-You can use Whatlang as a Python module in your applications:
-
-```python
-import whatlang
-
-# Basic language detection
-text = "Hello world! This is a sample English text."
-code, name, confidence = whatlang.detect_language(text)
-print(f"Detected language: {name} ({code}) with {confidence:.2f} confidence")
-
-# With language restriction
-text = "Este es un texto en español."
-code, name, confidence = whatlang.detect_language(text, lang_set=["es", "fr", "it"])
-print(f"Detected language: {name} ({code}) with {confidence:.2f} confidence")
-
-# With custom fallback
-empty_text = ""
-code, name, confidence = whatlang.detect_language(
-    empty_text, 
-    fallback_code="xx", 
-    fallback_name="Unknown Language"
-)
-print(f"Fallback: {name} ({code}) with {confidence:.2f} confidence")
-
-# Enable warning messages (for debugging)
-whatlang.set_warning_output(True)
-```
-
-### Sorting Files by Language
-
-Create language-specific directories and sort files into them:
-
-```bash
-# Sort all text files into language-specific directories
-for file in *.txt; do
-  lang=$(whatlang "$file" | cut -d':' -f2 | cut -d$'\t' -f1)
-  mkdir -p "by-language/$lang"
-  cp "$file" "by-language/$lang/"
-done
-```
-
-### Using Whatlang in Shell Scripts
-
-Use Bash output format for direct variable integration:
-
-```bash
-# Integrate language information into a shell script
-eval $(whatlang --format bash document.txt)
-echo "This document is written in ${LANG_INFO[name]} (${LANG_INFO[code]})"
-
-# Check if a file is in English
-eval $(whatlang --format bash document.txt)
-if [ "${LANG_INFO[code]}" = "en" ]; then
-  echo "English document detected!"
-fi
-```
-
-### Batch Processing with Output Analysis
-
-Process multiple files and analyze language distribution:
-
-```bash
-# Generate CSV of all document languages for further analysis
-whatlang --format csv *.txt > language-analysis.csv
-
-# Count documents by language
-whatlang --format csv *.txt | cut -d',' -f2 | sort | uniq -c | sort -nr
+python3 -m venv /tmp/venv && /tmp/venv/bin/pip install py3langid==0.4.0 numpy
+PATH=/tmp/venv/bin:$PATH make model build test
 ```
 
 ## Limitations
 
-- **Minimum Text Length**: Requires approximately 5 characters for reliable detection
-- **Language Support**: Limited to languages supported by the langdetect library
-- **Mixed Content**: Only identifies the dominant language in mixed-language text
-- **Constructed Languages**: May not reliably detect constructed languages (e.g., Elvish, Klingon)
-- **Confidence Scores**: Confidence values are relative and may vary between language detection runs
+- Indonesian and Malay are hard to tell apart on short text; use `-L`.
+- No Unicode normalisation (py3langid applies NFC), and only ASCII all-caps
+  text is lowercased. Decomposed (NFD) text and all-caps Cyrillic or Greek can
+  be misdetected; lowercase or NFC-normalise such input first.
+- The binary is built for the host architecture and assumes a little-endian
+  CPU.
 
-## Testing
+## Licence
 
-Whatlang includes a comprehensive test suite using pytest. The tests cover core functionality, edge cases, and CLI integration.
-
-To run the tests:
-
-```bash
-# Activate virtual environment
-source .venv/bin/activate
-
-# Install test dependencies
-pip install -r requirements.txt
-
-# Run all tests with coverage report
-pytest
-
-# Run tests for a specific module
-pytest tests/test_detect_language.py
-
-# Run tests with more verbose output
-pytest -v
-
-# Generate HTML coverage report
-pytest --cov-report=html
-```
-
-The test suite includes:
-- Unit tests for core functions
-- Integration tests for CLI functionality
-- Edge case handling
-- Input/output format testing
-
-## License
-
-This project is licensed under the GNU General Public License v3.0 (GPL-3.0) - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-When contributing code, please:
-1. Add tests for new functionality
-2. Ensure all tests pass
-3. Maintain code quality and documentation
-4. Follow the existing coding style
-
-For development guidelines and more detailed information, see the [DEVELOPMENT.md](DEVELOPMENT.md) file.
-
+GPL-3.0 (`LICENSE`). The embedded model is from py3langid, BSD-3-Clause
+(`LICENSE-py3langid`).
