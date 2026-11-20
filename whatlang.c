@@ -13,9 +13,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 
-#define VERSION   "2.0.0"
+#define VERSION   "2.0.1"
 #define MAX_INPUT (64 * 1024)  // bytes examined per input
 #define MAX_CLS   256
 
@@ -54,6 +55,13 @@ static uint32_t SEEN[MAX_INPUT];   // features hit, in first-seen order
 static void die(int code, const char *msg) {
   fprintf(stderr, "whatlang: %s\n", msg);
   exit(code);
+}
+
+// Every exit after writing to stdout goes through here: a full disk or a
+// closed pipe only shows up when the buffer is flushed.
+static int finish(int rc) {
+  if (fflush(stdout) || ferror(stdout)) die(EX_IO, "write error");
+  return rc;
 }
 
 // Map the embedded model; refuse anything whose size doesn't add up.
@@ -98,25 +106,29 @@ static uint32_t go_child(uint32_t s, uint8_t b) {
 }
 
 // Fill allow[] from a comma-separated list; NULL or empty allows all.
-// Returns EX_OK or EX_INVAL (after reporting the unknown code).
+// Items are matched ignoring case and surrounding blanks ("ID, en" works);
+// blank items are skipped. Returns EX_OK or EX_INVAL (after reporting).
 static int parse_langs(const char *list, unsigned char *allow) {
   int any = 0;
   memset(allow, 0, MAX_CLS);
   for (const char *p = list ? list : ""; *p;) {
     size_t len = strcspn(p, ",");
+    const char *item = p, *next = p + len + (p[len] == ',');
+    while (len && (*item == ' ' || *item == '\t')) item++, len--;
+    while (len && (item[len - 1] == ' ' || item[len - 1] == '\t')) len--;
     if (len) {
       int found = 0;
-      for (uint32_t c = 0; c < H->n_cls; c++)
-        if (strlen(lang_name(c)) == len && !strncmp(p, lang_name(c), len))
+      for (uint32_t c = 0; c < H->n_cls; c++)  // model codes are lowercase
+        if (strlen(lang_name(c)) == len && !strncasecmp(item, lang_name(c), len))
           allow[c] = 1, found = 1;  // aliases (sr, uz) share a code
       if (!found) {
         fprintf(stderr, "whatlang: unknown language code '%.*s' (see whatlang -l)\n",
-                (int)len, p);
+                (int)len, item);
         return EX_INVAL;
       }
       any = 1;
     }
-    p += len + (p[len] == ',');
+    p = next;
   }
   if (!any) memset(allow, 1, H->n_cls);
   return EX_OK;
@@ -259,7 +271,8 @@ static void usage(void) {
     "\n"
     "  -c, --confidence   append TAB and a confidence from 0.00 to 1.00\n"
     "  -L, --langs LIST   only consider these comma-separated codes, e.g. id,en\n"
-    "                     (default: $WHATLANG_LANGS, else all languages)\n"
+    "                     (case and blanks ignored; default: $WHATLANG_LANGS,\n"
+    "                     else all languages)\n"
     "  -l, --list         list supported language codes\n"
     "  -V, --version      print version\n"
     "  -h, --help         show this help\n"
@@ -288,8 +301,8 @@ int main(int argc, char **argv) {
       case 'c': show_conf = 1; break;
       case 'L': langs = optarg; break;
       case 'l': list = 1; break;
-      case 'V': puts("whatlang " VERSION); return EX_OK;
-      case 'h': usage(); return EX_OK;
+      case 'V': puts("whatlang " VERSION); return finish(EX_OK);
+      case 'h': usage(); return finish(EX_OK);
       default:
         fputs("Try 'whatlang --help' for more information.\n", stderr);
         return EX_USAGE;
@@ -303,7 +316,7 @@ int main(int argc, char **argv) {
       while (d < c && strcmp(lang_name(c), lang_name(d))) d++;
       if (d == c) puts(lang_name(c));
     }
-    return EX_OK;
+    return finish(EX_OK);
   }
 
   unsigned char allow[MAX_CLS];
@@ -316,6 +329,5 @@ int main(int argc, char **argv) {
     int r = process(argv[i], nfiles > 1, show_conf, allow);
     if (r && !rc) rc = r;
   }
-  if (fflush(stdout) || ferror(stdout)) die(EX_IO, "write error");
-  return rc;
+  return finish(rc);
 }

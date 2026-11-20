@@ -20,6 +20,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+die() { (($# < 2)) || printf 'run_tests.sh: %s\n' "${*:2}" >&2; exit "${1:-0}"; }
 pass() { PASS+=1; }
 fail() { FAIL+=1; printf 'FAIL: %s\n' "$*" >&2; }
 
@@ -108,14 +109,49 @@ test_lang_set() {
   [[ $got == *xx* ]] && pass || fail "-L xx message: got ${got@Q}"
   expect_rc '-L empty item' 0 'hello world' -L id,,en
   expect_rc 'bad option' 2 'hello' -Z
+
+  # codes are matched without regard to case or surrounding blanks
+  expect_out '-L folds case' id 'apa kabar' -L ID
+  expect_out '-L trims blanks' id 'apa kabar' -L 'id, en'
+  expect_rc '-L blank item' 0 'hello world' -L 'id, ,en'
+  got=$(printf 'apa kabar' | WHATLANG_LANGS=' ID , en ' "$BIN" 2>/dev/null) ||:
+  [[ $got == id ]] && pass || fail "WHATLANG_LANGS with blanks: got ${got@Q}"
+  got=$(printf 'hello' | "$BIN" -L 'id, xx ' 2>&1 >/dev/null) ||:
+  [[ $got == *"'xx'"* ]] && pass || fail "-L message names trimmed code: got ${got@Q}"
+}
+
+test_cap() {
+  # Inputs cut at exactly MAX_INPUT (64 KiB): as FILE, via a pipe (which
+  # then drains an already-empty stream), and with a 3-byte character
+  # straddling the cut (65536 = 3*21845 + 1).
+  # ${#var} counts characters, never more than bytes, so these exceed 64 KiB
+  local -- id_text big='' ja_text got
+  local -i rc=0
+  id_text=$(<"$FIXTURES"/id.txt)
+  while ((${#big} < 70000)); do big+="$id_text "; done
+  head -c 65536 <<<"$big" >"$TMPDIR_T"/exact.txt \
+    || die 1 "cannot write $TMPDIR_T/exact.txt"
+  ja_text='こんにちは世界、今日は良い天気ですね。'  # 3-byte characters only
+  while ((${#ja_text} < 30000)); do ja_text+=$ja_text; done
+  printf '%s' "$ja_text" >"$TMPDIR_T"/big_ja.txt \
+    || die 1 "cannot write $TMPDIR_T/big_ja.txt"
+
+  got=$("$BIN" -- "$TMPDIR_T"/exact.txt) ||:
+  [[ $got == id ]] && pass || fail "exactly 64 KiB file: got ${got@Q}"
+  got=$(head -c 65536 -- "$TMPDIR_T"/exact.txt | "$BIN") || rc=$?
+  [[ $got == id ]] && ((rc == 0)) && pass \
+    || fail "exactly 64 KiB piped: got ${got@Q}, exit $rc"
+  rc=0
+  got=$("$BIN" -- "$TMPDIR_T"/big_ja.txt) || rc=$?
+  [[ $got == ja ]] && ((rc == 0)) && pass \
+    || fail "character cut at 64 KiB: got ${got@Q}, exit $rc"
 }
 
 test_files() {
   local -- out err
   local -i rc=0
-  TMPDIR_T=$(mktemp -d) || { printf 'mktemp -d failed\n' >&2; exit 1; }
   cp -- "$FIXTURES"/id.txt "$FIXTURES"/en.txt "$TMPDIR_T"/ \
-    || { printf 'cannot copy fixtures to %s\n' "$TMPDIR_T" >&2; exit 1; }
+    || die 1 "cannot copy fixtures to $TMPDIR_T"
 
   out=$("$BIN" -- "$FIXTURES"/fr.txt) ||:
   [[ $out == fr ]] && pass || fail "single file: got ${out@Q}"
@@ -131,6 +167,22 @@ test_files() {
 
   out=$(printf 'apa kabar' | "$BIN" -L id,en -) ||:
   [[ $out == id ]] && pass || fail "dash reads stdin: got ${out@Q}"
+
+  # feature counts must be reset between inputs: a repeated file scores the same
+  local -a lines=()
+  out=$(cd -- "$TMPDIR_T" && "$BIN" -c id.txt en.txt id.txt) ||:
+  mapfile -t lines <<<"$out"
+  ((${#lines[@]} == 3)) && [[ ${lines[0]} == "${lines[2]}" && ${lines[0]} == id.txt$'\t'id$'\t'* ]] \
+    && pass || fail "repeated file: got ${out@Q}"
+
+  # unreadable file -> exit 13 (root reads anything, so only as a normal user)
+  if ((EUID)); then
+    printf 'apa kabar' >"$TMPDIR_T"/locked.txt && chmod -- 000 "$TMPDIR_T"/locked.txt \
+      || die 1 "cannot create $TMPDIR_T/locked.txt"
+    rc=0
+    "$BIN" -- "$TMPDIR_T"/locked.txt >/dev/null 2>&1 || rc=$?
+    ((rc == 13)) && pass || fail "unreadable file: want exit 13, got $rc"
+  fi
 }
 
 test_info() {
@@ -140,15 +192,30 @@ test_info() {
   [[ $'\n'$list$'\n' == *$'\nid\n'* && $'\n'$list$'\n' == *$'\nms\n'* \
      && $'\n'$list$'\n' == *$'\nen\n'* ]] && pass || fail '-l includes id, ms, en'
   ver=$("$BIN" -V) ||:
-  [[ $ver == 'whatlang 2.0.0' ]] && pass || fail "-V: got ${ver@Q}"
+  [[ $ver == 'whatlang 2.0.1' ]] && pass || fail "-V: got ${ver@Q}"
   "$BIN" -h | grep -q -- '--langs' && pass || fail '-h mentions --langs'
+
+  # a failed write to stdout is an I/O error on every output path
+  [[ -w /dev/full ]] || { printf 'skip: no /dev/full\n' >&2; return 0; }
+  local -- opt
+  local -i rc
+  for opt in -l -V -h; do
+    rc=0
+    "$BIN" "$opt" >/dev/full 2>/dev/null || rc=$?
+    ((rc == 5)) && pass || fail "$opt to a full device: want exit 5, got $rc"
+  done
+  rc=0
+  printf 'apa kabar' | "$BIN" >/dev/full 2>/dev/null || rc=$?
+  ((rc == 5)) && pass || fail "result to a full device: want exit 5, got $rc"
 }
 
 main() {
-  [[ -x $BIN ]] || { printf 'whatlang binary not found: %s\n' "$BIN" >&2; exit 3; }
+  [[ -x $BIN ]] || die 3 "whatlang binary not found: $BIN"
+  TMPDIR_T=$(mktemp -d) || die 1 'mktemp -d failed'
   test_fixtures
   test_short_text
   test_edge_input
+  test_cap
   test_lang_set
   test_files
   test_info

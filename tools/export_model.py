@@ -70,9 +70,12 @@ def main():
   out_path = sys.argv[1]
 
   ptc, pc, classes, nm, row, out = load_model(MODEL_DIR / MODEL_FILE)
-  delta = np.frombuffer(nm, dtype=np.uint32).reshape(-1, 256)[
-    np.frombuffer(row, dtype=np.uint16)]
+  # nm and row are stdlib arrays whose item size load_model picks from the
+  # model's size, so take the dtype from the array rather than assuming it
+  delta = np.asarray(nm).reshape(-1, 256)[np.asarray(row)]
   n_states = delta.shape[0]
+  if n_states >= 1 << 32:
+    raise ValueError('too many DFA states for u32 indices')
   order, parent, pbyte, fail = trie_from_dfa(delta)
 
   kids = [[] for _ in range(n_states)]

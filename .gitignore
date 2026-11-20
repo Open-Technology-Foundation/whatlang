@@ -1,0 +1,26 @@
+# build output
+/whatlang
+build/
+
+# local tooling
+CLAUDE.md
+.claude/
+.gudang/
+.superpowers/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+.symlink
+# keeps local git helpers such as .gitcommit out; this file matches too
+# but is tracked (added with -f), so its rules reach every clone
+.git*
+
+# editor and scratch
+*~
+.*~
+*.bak
+*.old
+*.swp
+*.swo
+tmp/
+temp/

@@ -34,7 +34,8 @@ whatlang [OPTIONS] [FILE...]
 
   -c, --confidence   append TAB and a confidence from 0.00 to 1.00
   -L, --langs LIST   only consider these comma-separated codes, e.g. id,en
-                     (default: $WHATLANG_LANGS, else all languages)
+                     (case and blanks ignored; default: $WHATLANG_LANGS,
+                     else all languages)
   -l, --list         list supported language codes
   -V, --version      print version
   -h, --help         show this help
